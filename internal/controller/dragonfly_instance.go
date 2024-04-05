@@ -375,6 +375,40 @@ func (dfi *DragonflyInstance) replicaOfNoOne(ctx context.Context, pod *corev1.Po
 
 	dfi.log.Info("Running SLAVE OF NO ONE command", "pod", pod.Name, "addr", redisClient.Options().Addr)
 	resp, err := redisClient.SlaveOf(ctx, "NO", "ONE").Result()
+	// need to get
+	if err != nil {
+		return fmt.Errorf("error running SLAVE OF NO ONE command: %w", err)
+	}
+
+	if resp != "OK" {
+		return fmt.Errorf("response of `SLAVE OF NO ONE` on master is not OK: %s", resp)
+	}
+
+	dfi.log.Info("Marking pod role as master", "pod", pod.Name)
+	pod.Labels[resources.Role] = resources.Master
+	if err := dfi.client.Update(ctx, pod); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// need to use redisclient to get replica-priority
+// if replica-priority is same then get slave_repl_offset
+// if those are same then get run_id
+func (dfi *DragonflyInstance) replicaChoice(ctx context.Context, pod *corev1.Pod) error {
+
+	// get all pods
+	// create a map of podName: replica priority, slave_repl_offset and run_id
+	// run info command on each pods
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: fmt.Sprintf("%s:%d", pod.Status.PodIP, resources.DragonflyAdminPort),
+	})
+	defer redisClient.Close()
+	dfi.log.Info("Running INFO command", "pod", pod.Name, "addr", redisClient.Options().Addr)
+	resp, err := redisClient.SlaveOf(ctx, "NO", "ONE").Result()
+	// need to get
+	redisClient.Info()
 	if err != nil {
 		return fmt.Errorf("error running SLAVE OF NO ONE command: %w", err)
 	}
